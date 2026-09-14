@@ -1,11 +1,16 @@
+import os
 import sqlite3
+import requests
 from functools import wraps
 from flask import Flask, jsonify, request
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 
 DATABASE = "/Users/beatsou/mon-api/services.db"
-CLE_API = "cle-test-angelo"
+CLE_API = os.environ.get("CLE_API")
 
 def ouvrir_connexion():
     connexion = sqlite3.connect(DATABASE)
@@ -234,6 +239,61 @@ def supprimer_service(service_id):
         return jsonify(erreur="Service introuvable."), 404
 
     return jsonify(message="Service supprimé avec succès.")
+
+@app.route("/api/meteo/<ville>")
+def meteo_ville(ville):
+    pays = request.args.get("pays")
+    url_geocodage = "https://geocoding-api.open-meteo.com/v1/search"
+
+    parametres_geocodage = {
+        "name": ville,
+        "count": 1,
+        "language": "fr",
+        "format": "json"
+    }
+
+    if pays:
+        parametres_geocodage["countryCode"] = pays.upper()
+
+    try:
+        reponse_geocodage = requests.get(
+            url_geocodage,
+            params=parametres_geocodage,
+            timeout=10
+        )
+        reponse_geocodage.raise_for_status()
+    except requests.RequestException:
+        return jsonify(erreur="Impossible de rechercher cette ville."), 502
+
+    resultats = reponse_geocodage.json().get("results", [])
+
+    if not resultats:
+        return jsonify(erreur="Ville introuvable."), 404
+
+    lieu = resultats[0]
+
+    try:
+        reponse_meteo = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": lieu["latitude"],
+                "longitude": lieu["longitude"],
+                "current": "temperature_2m,wind_speed_10m"
+            },
+            timeout=10
+        )
+        reponse_meteo.raise_for_status()
+    except requests.RequestException:
+        return jsonify(erreur="Impossible de récupérer la météo."), 502
+
+    meteo_actuelle = reponse_meteo.json()["current"]
+
+    return jsonify(
+        ville=lieu["name"],
+        pays=lieu.get("country"),
+        temperature=meteo_actuelle["temperature_2m"],
+        vent_km_h=meteo_actuelle["wind_speed_10m"]
+    )
 
 
 if __name__ == "__main__":
