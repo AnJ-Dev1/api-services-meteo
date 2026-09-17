@@ -2,6 +2,8 @@ import sqlite3
 
 from unittest.mock import Mock, patch
 
+import requests
+
 import pytest
 
 from app import CLE_API, app
@@ -131,3 +133,13 @@ def test_meteo_bali(client):
         "temperature": 28.5,
         "vent_km_h": 12.0
     }
+
+def test_meteo_indisponible(client):
+     with patch(
+        "app.requests.get",
+        side_effect=requests.RequestException("Open-Meteo indisponible")
+    ):
+        reponse = client.get("/api/meteo/Bali?pays=ID")
+
+     assert reponse.status_code == 502
+     assert reponse.get_json()["erreur"] == "Impossible de rechercher cette ville."
