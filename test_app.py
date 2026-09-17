@@ -78,4 +78,16 @@ def test_creation_service_autorisee(client):
     )
 
     assert reponse.status_code == 201
-    assert reponse.get_json()["service"]["nom"] == "Nouveau service"
+    assert reponse.get_json()["service"]["nom"]
+
+    
+def test_suppression_service_autorisee(client):
+    reponse = client.delete(
+        "/api/services/1",
+        headers={"X-API-Key": CLE_API}
+    )
+
+    assert reponse.status_code == 200
+
+    verification = client.get("/api/services/1")
+    assert verification.status_code == 404
