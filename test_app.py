@@ -1,5 +1,7 @@
 import sqlite3
 
+from unittest.mock import Mock, patch
+
 import pytest
 
 from app import CLE_API, app
@@ -78,9 +80,9 @@ def test_creation_service_autorisee(client):
     )
 
     assert reponse.status_code == 201
-    assert reponse.get_json()["service"]["nom"]
+    assert reponse.get_json()["service"]["nom"] == "Nouveau service"
 
-    
+
 def test_suppression_service_autorisee(client):
     reponse = client.delete(
         "/api/services/1",
@@ -91,3 +93,41 @@ def test_suppression_service_autorisee(client):
 
     verification = client.get("/api/services/1")
     assert verification.status_code == 404
+
+def test_meteo_bali(client):
+    fausse_reponse_geocodage = Mock()
+    fausse_reponse_geocodage.json.return_value = {
+        "results": [
+            {
+                "name": "Bali",
+                "country": "Indonésie",
+                "latitude": -8.4095,
+                "longitude": 115.1889
+            }
+        ]
+    }
+
+    fausse_reponse_meteo = Mock()
+    fausse_reponse_meteo.json.return_value = {
+        "current": {
+            "temperature_2m": 28.5,
+            "wind_speed_10m": 12.0
+        }
+    }
+
+    with patch(
+        "app.requests.get",
+        side_effect=[
+            fausse_reponse_geocodage,
+            fausse_reponse_meteo
+        ]
+    ):
+        reponse = client.get("/api/meteo/Bali?pays=ID")
+
+    assert reponse.status_code == 200
+    assert reponse.get_json() == {
+        "ville": "Bali",
+        "pays": "Indonésie",
+        "temperature": 28.5,
+        "vent_km_h": 12.0
+    }
