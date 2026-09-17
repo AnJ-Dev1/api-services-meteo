@@ -1,4 +1,5 @@
 from app import app
+from app import app, CLE_API
 
 
 def test_liste_services():
@@ -31,3 +32,17 @@ def test_service_inexistant():
     reponse = client.get("/api/services/999")
 
     assert reponse.status_code == 404
+
+def test_creation_prix_negatif_refusee():
+    client = app.test_client()
+
+    reponse = client.post(
+        "/api/services",
+        headers={"X-API-Key": CLE_API},
+        json={
+            "nom": "Test invalide",
+            "prix": -10
+        }
+    )
+
+    assert reponse.status_code == 400
