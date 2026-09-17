@@ -9,11 +9,15 @@ load_dotenv()
 
 app = Flask(__name__)
 
-DATABASE = "/Users/beatsou/mon-api/services.db"
+app.config["DATABASE"] = os.path.join(
+    os.path.dirname(__file__),
+    "services.db"
+)
+
 CLE_API = os.environ.get("CLE_API")
 
 def ouvrir_connexion():
-    connexion = sqlite3.connect(DATABASE)
+    connexion = sqlite3.connect(app.config["DATABASE"])
     connexion.row_factory = sqlite3.Row
     return connexion
 
