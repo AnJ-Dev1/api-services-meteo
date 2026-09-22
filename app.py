@@ -26,7 +26,7 @@ def requiert_cle_api(f):
     def fonction_protegee(*args, **kwargs):
         cle_recue = request.headers.get("X-API-Key")
 
-        if cle_recue != CLE_API:
+        if not CLE_API or cle_recue != CLE_API:
             return jsonify(erreur="Clé API invalide ou absente."), 401
 
         return f(*args, **kwargs)

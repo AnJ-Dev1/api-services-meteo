@@ -134,6 +134,15 @@ def test_meteo_bali(client):
         "vent_km_h": 12.0
     }
 
+def test_creation_refusee_si_cle_serveur_absente(client):
+    with patch("app.CLE_API", None):
+        reponse = client.post(
+            "/api/services",
+            json={"nom": "Service interdit", "prix": 100}
+        )
+
+    assert reponse.status_code == 401
+
 def test_meteo_indisponible(client):
      with patch(
         "app.requests.get",
