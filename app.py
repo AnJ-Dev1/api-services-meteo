@@ -1,25 +1,30 @@
 import os
-import sqlite3
 import requests
+import psycopg
+from psycopg.rows import dict_row
 from functools import wraps
 from flask import Flask, jsonify, request
 from dotenv import load_dotenv
 
 load_dotenv()
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 app = Flask(__name__)
-
-app.config["DATABASE"] = os.path.join(
-    os.path.dirname(__file__),
-    "services.db"
-)
+app.config["DATABASE_URL"] = DATABASE_URL
 
 CLE_API = os.environ.get("CLE_API")
 
 def ouvrir_connexion():
-    connexion = sqlite3.connect(app.config["DATABASE"])
-    connexion.row_factory = sqlite3.Row
-    return connexion
+    adresse = app.config["DATABASE_URL"]
+
+    if not adresse:
+        raise RuntimeError("DATABASE_URL est absente.")
+
+    return psycopg.connect(
+        adresse,
+        row_factory=dict_row,
+        connect_timeout=10
+    )
 
 def requiert_cle_api(f):
     @wraps(f)
@@ -66,7 +71,7 @@ def liste_services():
         curseur.execute("SELECT id, nom, prix FROM services")
     else:
         curseur.execute(
-            "SELECT id, nom, prix FROM services WHERE prix <= ?",
+            "SELECT id, nom, prix FROM services WHERE prix <= %s",
             (prix_max,)
         )
 
@@ -82,7 +87,7 @@ def detail_service(service_id):
     curseur = connexion.cursor()
 
     curseur.execute(
-        "SELECT id, nom, prix FROM services WHERE id = ?",
+        "SELECT id, nom, prix FROM services WHERE id = %s",
         (service_id,)
     )
 
@@ -116,12 +121,12 @@ def creer_service():
     curseur = connexion.cursor()
 
     curseur.execute(
-        "INSERT INTO services (nom, prix) VALUES (?, ?)",
+        "INSERT INTO services (nom, prix) VALUES (%s, %s) RETURNING id",
         (nom, prix)
     )
 
+    nouveau_service_id = curseur.fetchone()["id"]
     connexion.commit()
-    nouveau_service_id = curseur.lastrowid
     connexion.close()
 
     return jsonify(
@@ -154,7 +159,7 @@ def modifier_service(service_id):
     curseur = connexion.cursor()
 
     curseur.execute(
-        "UPDATE services SET nom = ?, prix = ? WHERE id = ?",
+        "UPDATE services SET nom = %s, prix = %s WHERE id = %s",
         (nom, prix, service_id)
     )
 
@@ -192,9 +197,10 @@ def modifier_partiellement_service(service_id):
     curseur = connexion.cursor()
 
     curseur.execute(
-        "SELECT id, nom, prix FROM services WHERE id = ?",
-        (service_id,)
+    "SELECT id, nom, prix FROM services WHERE id = %s",
+    (service_id,)
     )
+    
 
     service = curseur.fetchone()
 
@@ -206,7 +212,7 @@ def modifier_partiellement_service(service_id):
     nouveau_prix = prix if prix is not None else service["prix"]
 
     curseur.execute(
-        "UPDATE services SET nom = ?, prix = ? WHERE id = ?",
+        "UPDATE services SET nom = %s, prix = %s WHERE id = %s",
         (nouveau_nom, nouveau_prix, service_id)
     )
 
@@ -231,7 +237,7 @@ def supprimer_service(service_id):
     curseur = connexion.cursor()
 
     curseur.execute(
-        "DELETE FROM services WHERE id = ?",
+        "DELETE FROM services WHERE id = %s",
         (service_id,)
     )
 

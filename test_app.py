@@ -1,6 +1,9 @@
-import sqlite3
+import os
+import psycopg
 
 from unittest.mock import Mock, patch
+
+from psycopg.conninfo import conninfo_to_dict
 
 import requests
 
@@ -8,38 +11,56 @@ import pytest
 
 from app import CLE_API, app
 
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
+
+def verifier_base_test():
+    if not TEST_DATABASE_URL:
+        raise RuntimeError("TEST_DATABASE_URL est absente.")
+
+    adresse_application = app.config["DATABASE_URL"]
+
+    if not adresse_application:
+        raise RuntimeError("DATABASE_URL est absente.")
+
+    configuration_test = conninfo_to_dict(TEST_DATABASE_URL)
+    configuration_application = conninfo_to_dict(adresse_application)
+
+    hote_test = configuration_test.get("host", "").replace("-pooler", "")
+    hote_application = configuration_application.get("host", "").replace("-pooler", "")
+
+    if not hote_test or hote_test == hote_application:
+        raise RuntimeError("Les tests doivent utiliser une branche Neon distincte.")
+
 
 @pytest.fixture
-def client(tmp_path):
-    base_test = tmp_path / "services_test.db"
+def client(monkeypatch):
+    verifier_base_test()
 
-    connexion = sqlite3.connect(base_test)
-    curseur = connexion.cursor()
+    with psycopg.connect(TEST_DATABASE_URL, connect_timeout=10) as connexion:
+        with connexion.cursor() as curseur:
+            curseur.execute("""
+                CREATE TABLE IF NOT EXISTS services (
+                    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                    nom TEXT NOT NULL,
+                    prix INTEGER NOT NULL CHECK (prix > 0)
+                )
+            """)
 
-    curseur.execute("""
-        CREATE TABLE services (
-            id INTEGER PRIMARY KEY,
-            nom TEXT NOT NULL,
-            prix INTEGER NOT NULL
-        )
-    """)
+            curseur.execute("TRUNCATE TABLE services RESTART IDENTITY")
 
-    curseur.execute(
-        "INSERT INTO services (nom, prix) VALUES (?, ?)",
-        ("Service de test", 100)
+            curseur.execute(
+                "INSERT INTO services (nom, prix) VALUES (%s, %s)",
+                ("Service de test", 100)
+            )
+
+    monkeypatch.setitem(
+        app.config,
+        "DATABASE_URL",
+        TEST_DATABASE_URL
     )
 
-    connexion.commit()
-    connexion.close()
-
-    ancienne_base = app.config["DATABASE"]
-    app.config["DATABASE"] = str(base_test)
-
-    try:
-        with app.test_client() as client:
-            yield client
-    finally:
-        app.config["DATABASE"] = ancienne_base
+    with app.test_client() as client:
+        yield client
 
 
 def test_liste_services(client):
